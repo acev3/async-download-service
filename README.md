@@ -36,6 +36,14 @@ python server.py
 
 Сервер запустится на порту 8080, чтобы проверить его работу перейдите в браузере на страницу [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
+Аргументы:
+```
+  -h, --help     show this help message and exit
+  --path PATH    Set directory
+  --debug DEBUG  Set debug mode
+  --delay DELAY  Set delay between chunks
+```
+
 ## Как развернуть на сервере
 
 ```bash
