@@ -6,34 +6,34 @@ import os
 import logging
 import argparse
 from functools import partial
+import sys
 
-
-INTERVAL_SECS = 1
 logger = logging.getLogger('SERVER')
 
 async def archivate(photos_path, delay, request, kb_step=100):
-    archive_hash = request.match_info.get('archive_hash', "hash")
+    archive_hash = request.match_info.get('archive_hash')
     response = web.StreamResponse()
     response.headers['Content-Disposition'] = f'attachment; filename="photos_{archive_hash}.zip"'
     response.headers['Content-Type'] = 'application/zip'
     folder = os.path.join(photos_path, archive_hash)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    fol = os.path.join(BASE_DIR, archive_hash)
     if not os.path.exists(folder):
          return web.HTTPNotFound(
             text='Archive does not exist'
         )
     bytes_step = kb_step * 1024
     await response.prepare(request)
-    cmd = 'zip -r - *'
-    process = await asyncio.create_subprocess_shell(
-        cmd = cmd,
-        cwd = folder,
+    cmd = ['zip','-q', '-', '-r',folder]
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE)
     try:
         while True:
-            archive_chank = await process.stdout.read(bytes_step)
+            archive_chunk = await process.stdout.read(bytes_step)
             logger.debug('Sending archive chunk ...')
-            await response.write(archive_chank)
+            await response.write(archive_chunk)
             await asyncio.sleep(delay)
             if process.stdout.at_eof():
                 break
@@ -43,6 +43,7 @@ async def archivate(photos_path, delay, request, kb_step=100):
         process.kill()
         await process.communicate()
         logging.debug(message)
+        raise
     finally:
         logger.debug('Download was interrupted')
         response.force_close()
@@ -55,43 +56,22 @@ async def handle_index_page(request):
     return web.Response(text=index_contents, content_type='text/html')
 
 
-async def uptime_handler(request):
-    
-    response = web.StreamResponse()
-
-    # Большинство браузеров не отрисовывают частично загруженный контент, только если это не HTML.
-    # Поэтому отправляем клиенту именно HTML, указываем это в Content-Type.
-    response.headers['Content-Type'] = 'text/html'
-
-    # Отправляет клиенту HTTP заголовки
-    await response.prepare(request)
-
-    while True:
-        formatted_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        message = f'{formatted_date}<br>'  # <br> — HTML тег переноса строки
-
-        # Отправляет клиенту очередную порцию ответа
-        await response.write(message.encode('utf-8'))
-
-        await asyncio.sleep(INTERVAL_SECS)
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path", type=str, help="Set directory")
-    parser.add_argument("--debug", help="Set debug mode")
+    parser.add_argument('--path', type=str, help='Set directory')
+    parser.add_argument('--debug', help='Set debug mode')
     parser.add_argument(
-        "--delay",
+        '--delay',
         type=float,
-        help="Set delay between chunks",
+        help='Set delay between chunks',
     )
     args = parser.parse_args()
 
-    if args.debug or os.getenv("DEBUG") == "1":
+    if args.debug or os.getenv('DEBUG') == '1':
         logging.basicConfig(level=logging.DEBUG)
 
-    photos_path = args.path or os.getenv("PHOTOS_PATH", "test_photos")
-    delay = args.delay or float(os.getenv("DELAY", "0"))
+    photos_path = args.path or os.getenv('PHOTOS_PATH', 'test_photos')
+    delay = args.delay or float(os.getenv('DELAY', '0'))
 
     app = web.Application()
     app.add_routes([
