@@ -16,17 +16,16 @@ async def archivate(photos_path, delay, request, kb_step=100):
     response.headers['Content-Disposition'] = f'attachment; filename="photos_{archive_hash}.zip"'
     response.headers['Content-Type'] = 'application/zip'
     folder = os.path.join(photos_path, archive_hash)
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    fol = os.path.join(BASE_DIR, archive_hash)
     if not os.path.exists(folder):
          return web.HTTPNotFound(
             text='Archive does not exist'
         )
     bytes_step = kb_step * 1024
     await response.prepare(request)
-    cmd = ['zip','-q', '-', '-r',folder]
+    cmd = ['zip','-q', '-', '-r', archive_hash]
     process = await asyncio.create_subprocess_exec(
         *cmd,
+        cwd=photos_path,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE)
     try:
@@ -40,11 +39,11 @@ async def archivate(photos_path, delay, request, kb_step=100):
     except asyncio.CancelledError:
         logging.debug('Client was disconnected')
         message = f'Killing process (pid = {str(process.pid)})'
-        process.kill()
-        await process.communicate()
         logging.debug(message)
         raise
     finally:
+        process.kill()
+        await process.communicate()
         logger.debug('Download was interrupted')
         response.force_close()
     return response
